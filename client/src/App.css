@@ -1,0 +1,418 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f5f7fb;
+  color: #263238;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #fdf2f8, #eef6ff);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 430px;
+  background: white;
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 15px 45px rgba(0, 0, 0, 0.08);
+}
+
+.logo {
+  font-size: 50px;
+  text-align: center;
+}
+
+.login-card h1 {
+  text-align: center;
+  margin: 10px 0 5px;
+  font-size: 30px;
+}
+
+.subtitle {
+  text-align: center;
+  color: #718096;
+  margin-bottom: 30px;
+}
+
+label {
+  display: block;
+  margin: 16px 0 7px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #d9e0ea;
+  border-radius: 10px;
+  padding: 12px;
+  outline: none;
+  background: white;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #667eea;
+}
+
+.primary-button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  background: #667eea;
+  color: white;
+  font-weight: 700;
+}
+
+.primary-button:hover {
+  opacity: 0.9;
+}
+
+.secondary-button,
+.clear-button {
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-weight: 600;
+}
+
+.secondary-button {
+  background: #667eea;
+  color: white;
+}
+
+.clear-button {
+  background: #edf2f7;
+  color: #2d3748;
+}
+
+.error-message,
+.success-message {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.error-message {
+  background: #fff5f5;
+  color: #c53030;
+}
+
+.success-message {
+  background: #f0fff4;
+  color: #276749;
+}
+
+.demo-login {
+  margin-top: 25px;
+  padding: 15px;
+  background: #f7fafc;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.demo-login p {
+  margin: 6px 0;
+}
+
+.app {
+  min-height: 100vh;
+}
+
+.topbar {
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 18px 5%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.topbar span {
+  color: #718096;
+  font-size: 13px;
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-area small {
+  display: block;
+  color: #718096;
+  margin-top: 3px;
+}
+
+.logout-button {
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 9px;
+  padding: 9px 14px;
+}
+
+.container {
+  width: 90%;
+  max-width: 1250px;
+  margin: 30px auto;
+}
+
+.welcome-card {
+  background: white;
+  border-radius: 18px;
+  padding: 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.04);
+}
+
+.welcome-card h2 {
+  margin: 0 0 7px;
+}
+
+.welcome-card p {
+  margin: 0;
+  color: #718096;
+}
+
+.role-badge {
+  background: #edf2ff;
+  color: #4c51bf;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+}
+
+.card {
+  background: white;
+  padding: 25px;
+  border-radius: 18px;
+  margin-bottom: 25px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.04);
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.card-description {
+  color: #718096;
+  font-size: 14px;
+}
+
+.division-list {
+  margin-top: 20px;
+}
+
+.division-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 13px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.division-item span {
+  color: #718096;
+  font-size: 13px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto auto;
+  gap: 12px;
+  align-items: end;
+  margin: 20px 0;
+}
+
+.filters label {
+  margin-top: 0;
+}
+
+.activity-item {
+  position: relative;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  padding: 18px;
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 150px;
+  gap: 20px;
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.activity-header h3 {
+  margin: 0 0 5px;
+}
+
+.activity-header span {
+  font-size: 13px;
+  color: #667eea;
+}
+
+.activity-header time {
+  color: #718096;
+  font-size: 12px;
+}
+
+.activity-content p {
+  margin: 15px 0;
+  line-height: 1.5;
+}
+
+.activity-content small {
+  color: #718096;
+}
+
+.activity-image {
+  width: 150px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.delete-button {
+  position: absolute;
+  right: 18px;
+  bottom: 12px;
+  border: none;
+  background: transparent;
+  color: #e53e3e;
+  font-size: 12px;
+}
+
+.empty-state {
+  padding: 30px;
+  text-align: center;
+  color: #718096;
+  background: #f7fafc;
+  border-radius: 10px;
+}
+
+.analytics-card {
+  margin-top: 25px;
+}
+
+.stat-card {
+  display: inline-flex;
+  flex-direction: column;
+  padding: 20px 30px;
+  background: #f7fafc;
+  border-radius: 12px;
+  margin: 10px 0 25px;
+}
+
+.stat-card span {
+  color: #718096;
+  font-size: 13px;
+}
+
+.stat-card strong {
+  font-size: 30px;
+  margin-top: 5px;
+}
+
+.analytics-card h3 {
+  margin-top: 25px;
+}
+
+.analytics-list {
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.analytics-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 13px 15px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.analytics-row:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 800px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .user-area {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .activity-item {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-image {
+    width: 100%;
+    height: 200px;
+  }
+}
