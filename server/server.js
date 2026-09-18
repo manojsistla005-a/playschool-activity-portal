@@ -8,19 +8,45 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const OpenAI = require("openai");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+
+// ============================================================
+// ENVIRONMENT
+// ============================================================
+
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 if (!JWT_SECRET) {
   console.error("JWT_SECRET is missing from .env");
   process.exit(1);
 }
+
+if (!OPENAI_API_KEY) {
+  console.error("OPENAI_API_KEY is missing from .env");
+  process.exit(1);
+}
+
+
+// ============================================================
+// OPENAI
+// ============================================================
+
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY,
+});
+
+
+// ============================================================
+// DATABASE
+// ============================================================
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -30,6 +56,11 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
 });
+
+
+// ============================================================
+// FILE UPLOADS
+// ============================================================
 
 const uploadDir = path.join(__dirname, "uploads");
 
@@ -931,6 +962,410 @@ app.delete(
 
 
 // ============================================================
+// AI — ACTIVITY SUMMARY
+// ============================================================
+
+app.post(
+  "/api/ai/activity-summary",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        student_id,
+        description,
+      } = req.body;
+
+      if (!student_id || !description) {
+        return res.status(400).json({
+          message:
+            "Student and activity description are required",
+        });
+      }
+
+      // --------------------------------------------------------
+      // Verify student ownership
+      // --------------------------------------------------------
+
+      const [students] = await pool.query(
+        `
+        SELECT
+          s.id,
+          s.name,
+          d.standard,
+          d.division,
+          d.teacher_id
+        FROM students s
+        JOIN divisions d
+          ON s.division_id = d.id
+        WHERE s.id = ?
+        `,
+        [student_id]
+      );
+
+      if (students.length === 0) {
+        return res.status(404).json({
+          message: "Student not found",
+        });
+      }
+
+      const student = students[0];
+
+      if (
+        req.user.role !== "PRINCIPAL" &&
+        student.teacher_id !== req.user.id
+      ) {
+        return res.status(403).json({
+          message:
+            "You cannot generate an AI summary for this student",
+        });
+      }
+
+      // --------------------------------------------------------
+      // Ask OpenAI
+      // --------------------------------------------------------
+
+      const response = await openai.responses.create({
+        model: "gpt-5.6-luna",
+
+        instructions: `
+You are an AI assistant for a play school teacher.
+
+Analyze the teacher's observation of a young child.
+
+Return ONLY valid JSON with this structure:
+
+{
+  "summary": "A short, natural summary of what the child did.",
+  "skills": [
+    "Skill 1",
+    "Skill 2",
+    "Skill 3"
+  ]
+}
+
+Rules:
+- Keep the summary to 1 or 2 sentences.
+- Use simple teacher-friendly language.
+- Identify only skills that can reasonably be inferred from the activity.
+- Do not diagnose the child.
+- Do not make medical or psychological claims.
+- Do not invent facts.
+- Keep the tone positive and age-appropriate.
+        `,
+
+        input: `
+Child name: ${student.name}
+Standard: ${student.standard}
+Division: ${student.division}
+
+Teacher observation:
+${description}
+        `,
+      });
+
+      const text = response.output_text;
+
+      if (!text) {
+        return res.status(500).json({
+          message: "AI did not return a response",
+        });
+      }
+
+      let result;
+
+      try {
+        result = JSON.parse(text);
+      } catch (parseError) {
+        console.error(
+          "AI JSON parsing error:",
+          parseError
+        );
+
+        return res.status(500).json({
+          message:
+            "AI returned an unexpected response",
+        });
+      }
+
+      res.json({
+        student: student.name,
+        summary: result.summary || "",
+        skills: Array.isArray(result.skills)
+          ? result.skills
+          : [],
+      });
+    } catch (error) {
+      console.error(
+        "AI activity summary error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Failed to generate AI activity summary",
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// AI — PARENT REPORT
+// ============================================================
+
+app.post(
+  "/api/ai/parent-report",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        student_id,
+        month,
+      } = req.body;
+
+      if (!student_id) {
+        return res.status(400).json({
+          message: "Student is required",
+        });
+      }
+
+      // --------------------------------------------------------
+      // Get student and verify ownership
+      // --------------------------------------------------------
+
+      const [students] = await pool.query(
+        `
+        SELECT
+          s.id,
+          s.name,
+          d.standard,
+          d.division,
+          d.teacher_id
+        FROM students s
+        JOIN divisions d
+          ON s.division_id = d.id
+        WHERE s.id = ?
+        `,
+        [student_id]
+      );
+
+      if (students.length === 0) {
+        return res.status(404).json({
+          message: "Student not found",
+        });
+      }
+
+      const student = students[0];
+
+      if (
+        req.user.role !== "PRINCIPAL" &&
+        student.teacher_id !== req.user.id
+      ) {
+        return res.status(403).json({
+          message:
+            "You cannot generate a parent report for this student",
+        });
+      }
+
+      // --------------------------------------------------------
+      // Get activities
+      // --------------------------------------------------------
+
+      let activityQuery = `
+        SELECT
+          description,
+          created_at
+        FROM activities
+        WHERE student_id = ?
+      `;
+
+      let activityParams = [student_id];
+
+      if (month) {
+        activityQuery += `
+          AND DATE_FORMAT(created_at, '%Y-%m') = ?
+        `;
+
+        activityParams.push(month);
+      }
+
+      activityQuery += `
+        ORDER BY created_at ASC
+      `;
+
+      const [activities] = await pool.query(
+        activityQuery,
+        activityParams
+      );
+
+      if (activities.length === 0) {
+        return res.status(404).json({
+          message:
+            "No activities found for this child and period",
+        });
+      }
+
+      // --------------------------------------------------------
+      // Prepare observations for AI
+      // --------------------------------------------------------
+
+      const observations = activities
+        .map((activity, index) => {
+          const date = new Date(
+            activity.created_at
+          ).toLocaleDateString("en-IN");
+
+          return `${index + 1}. ${date} - ${activity.description}`;
+        })
+        .join("\n");
+
+      const reportPeriod =
+        month || "Available activity history";
+
+      // --------------------------------------------------------
+      // Generate parent report
+      // --------------------------------------------------------
+
+      const response = await openai.responses.create({
+        model: "gpt-5.6-luna",
+
+        instructions: `
+You are an AI assistant helping a play school create
+a friendly progress report for parents.
+
+Use ONLY the observations provided.
+
+Return ONLY valid JSON using this exact structure:
+
+{
+  "introduction": "",
+  "highlights": [
+    ""
+  ],
+  "strengths": [
+    ""
+  ],
+  "development_areas": [
+    ""
+  ],
+  "home_activities": [
+    ""
+  ],
+  "closing": ""
+}
+
+Rules:
+- Make the report warm, simple, and parent-friendly.
+- Base every statement on the recorded observations.
+- Do not invent achievements.
+- Do not diagnose the child.
+- Do not make medical or psychological claims.
+- "development_areas" should be gentle areas where more practice
+  could be encouraged based on the observations.
+- "home_activities" should be simple activities parents can do
+  with a young child.
+- Avoid comparing this child with other children.
+- Keep each item concise.
+        `,
+
+        input: `
+Child: ${student.name}
+
+Standard: ${student.standard}
+Division: ${student.division}
+
+Report period: ${reportPeriod}
+
+Recorded teacher observations:
+
+${observations}
+        `,
+      });
+
+      const text = response.output_text;
+
+      if (!text) {
+        return res.status(500).json({
+          message: "AI did not return a report",
+        });
+      }
+
+      let report;
+
+      try {
+        report = JSON.parse(text);
+      } catch (parseError) {
+        console.error(
+          "AI parent report JSON parsing error:",
+          parseError
+        );
+
+        return res.status(500).json({
+          message:
+            "AI returned an unexpected report format",
+        });
+      }
+
+      res.json({
+        student: {
+          id: student.id,
+          name: student.name,
+          standard: student.standard,
+          division: student.division,
+        },
+
+        period: reportPeriod,
+
+        activityCount: activities.length,
+
+        report: {
+          introduction:
+            report.introduction || "",
+
+          highlights:
+            Array.isArray(report.highlights)
+              ? report.highlights
+              : [],
+
+          strengths:
+            Array.isArray(report.strengths)
+              ? report.strengths
+              : [],
+
+          development_areas:
+            Array.isArray(
+              report.development_areas
+            )
+              ? report.development_areas
+              : [],
+
+          home_activities:
+            Array.isArray(
+              report.home_activities
+            )
+              ? report.home_activities
+              : [],
+
+          closing:
+            report.closing || "",
+        },
+      });
+    } catch (error) {
+      console.error(
+        "AI parent report error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Failed to generate AI parent report",
+      });
+    }
+  }
+);
+
+
+// ============================================================
 // START SERVER
 // ============================================================
 
@@ -939,3 +1374,197 @@ app.listen(PORT, () => {
     `Server running on http://localhost:${PORT}`
   );
 });
+// ============================================================
+// AI ACTIVITY SUMMARY
+// ============================================================
+
+app.post(
+  "/api/ai/activity-summary",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { description } = req.body;
+
+      if (!description || !description.trim()) {
+        return res.status(400).json({
+          message: "Activity description is required",
+        });
+      }
+
+      const response = await openai.responses.create({
+        model: "gpt-5.6-luna",
+        instructions:
+          "You are an AI assistant for a play school teacher. " +
+          "Analyze the teacher's activity observation and return a short, " +
+          "positive, parent-friendly summary. Identify 2 to 4 relevant " +
+          "developmental skills. Do not diagnose the child or make medical claims. " +
+          "Return ONLY valid JSON with exactly two fields: summary and skills. " +
+          "summary must be a single short sentence. " +
+          "skills must be an array of short skill names.",
+        input: description.trim(),
+      });
+
+      const text = response.output_text;
+
+      let result;
+
+      try {
+        result = JSON.parse(text);
+      } catch (parseError) {
+        console.error("AI returned invalid JSON:", text);
+
+        return res.status(500).json({
+          message: "AI returned an unexpected response",
+        });
+      }
+
+      res.json({
+        summary: result.summary,
+        skills: result.skills,
+      });
+    } catch (error) {
+      console.error("AI activity summary error:", error);
+
+      res.status(500).json({
+        message: "Failed to generate AI summary",
+      });
+    }
+  }
+);
+
+// ============================================================
+// AI PARENT-FRIENDLY REPORT
+// ============================================================
+
+app.get(
+  "/api/ai/parent-report",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { student_id } = req.query;
+
+      if (!student_id) {
+        return res.status(400).json({
+          message: "Student ID is required",
+        });
+      }
+
+      // Get the child and verify ownership
+      const [students] = await pool.query(
+        `
+        SELECT
+          s.id,
+          s.name,
+          d.standard,
+          d.division,
+          d.teacher_id
+        FROM students s
+        JOIN divisions d
+          ON s.division_id = d.id
+        WHERE s.id = ?
+        `,
+        [student_id]
+      );
+
+      if (students.length === 0) {
+        return res.status(404).json({
+          message: "Child not found",
+        });
+      }
+
+      const student = students[0];
+
+      // Teacher can only access their own division.
+      // Principal can access every child.
+      if (
+        req.user.role !== "PRINCIPAL" &&
+        student.teacher_id !== req.user.id
+      ) {
+        return res.status(403).json({
+          message: "You cannot generate a report for this child",
+        });
+      }
+
+      // Get this child's activities
+      const [activities] = await pool.query(
+        `
+        SELECT
+          description,
+          created_at
+        FROM activities
+        WHERE student_id = ?
+        ORDER BY created_at ASC
+        `,
+        [student_id]
+      );
+
+      if (activities.length === 0) {
+        return res.status(400).json({
+          message: "No activities found for this child",
+        });
+      }
+
+      const activityText = activities
+        .map(
+          (activity) =>
+            `${new Date(activity.created_at).toLocaleDateString()}: ${activity.description}`
+        )
+        .join("\n");
+
+      const response = await openai.responses.create({
+        model: "gpt-5.6-luna",
+
+        instructions:
+          "You are an AI assistant helping a play school create a " +
+          "warm, parent-friendly progress report for a young child. " +
+          "Use ONLY the activities provided by the teacher. " +
+          "Do not invent achievements or facts. " +
+          "Do not make medical, psychological, developmental, or diagnostic claims. " +
+          "Use positive, age-appropriate language. " +
+          "Mention areas to encourage rather than weaknesses. " +
+          "Return ONLY valid JSON with exactly these fields: " +
+          "period, highlights, strengths, areasToEncourage, homeActivities. " +
+          "period must be a short string. " +
+          "highlights must contain 2 to 4 short observations. " +
+          "strengths must contain 2 to 4 skill observations supported by the activities. " +
+          "areasToEncourage must contain 1 to 3 gentle suggestions. " +
+          "homeActivities must contain 2 to 4 simple activities parents can try at home.",
+
+        input:
+          `Child: ${student.name}\n` +
+          `Class: ${student.standard} ${student.division}\n\n` +
+          `Recorded activities:\n${activityText}`,
+      });
+
+      const text = response.output_text;
+
+      let report;
+
+      try {
+        report = JSON.parse(text);
+      } catch (parseError) {
+        console.error("AI returned invalid parent report:", text);
+
+        return res.status(500).json({
+          message: "AI returned an unexpected report format",
+        });
+      }
+
+      res.json({
+        childName: student.name,
+        period: report.period,
+        highlights: report.highlights || [],
+        strengths: report.strengths || [],
+        areasToEncourage: report.areasToEncourage || [],
+        homeActivities: report.homeActivities || [],
+      });
+    } catch (error) {
+      console.error("AI parent report error:", error);
+
+      res.status(500).json({
+        message: "Failed to generate parent report",
+      });
+    }
+  }
+);
+

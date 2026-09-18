@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import "./App.css";
 
@@ -30,6 +31,16 @@ function App() {
   // Manage children
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentDivision, setNewStudentDivision] = useState("");
+
+  // AI Activity Summary
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiSkills, setAiSkills] = useState([]);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // AI Parent Report
+  const [parentReport, setParentReport] = useState(null);
+  const [parentReportLoading, setParentReportLoading] = useState(false);
+  const [parentReportStudent, setParentReportStudent] = useState("");
 
   const loggedIn = Boolean(token && user);
 
@@ -148,6 +159,70 @@ function App() {
     }
   }, [loggedIn]);
 
+  // ============================================================
+  // AI ACTIVITY SUMMARY
+  // ============================================================
+
+  async function generateActivitySummary() {
+    setMessage("");
+    setAiSummary("");
+    setAiSkills([]);
+
+    if (!description.trim()) {
+      setMessage("Enter an activity first.");
+      return;
+    }
+
+    try {
+      setAiLoading(true);
+
+      const data = await apiFetch("/api/ai/activity-summary", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          description: description.trim(),
+        }),
+      });
+
+      setAiSummary(data.summary || "");
+      setAiSkills(data.skills || []);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  // ============================================================
+  // AI PARENT REPORT
+  // ============================================================
+
+  async function generateParentReport(studentId) {
+    setMessage("");
+    setParentReport(null);
+    setParentReportStudent(studentId);
+
+    try {
+      setParentReportLoading(true);
+
+      const data = await apiFetch(
+        `/api/ai/parent-report?student_id=${studentId}`
+      );
+
+      setParentReport(data);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setParentReportLoading(false);
+    }
+  }
+
+  // ============================================================
+  // ADD ACTIVITY
+  // ============================================================
+
   async function addActivity(event) {
     event.preventDefault();
     setMessage("");
@@ -175,6 +250,8 @@ function App() {
       setDescription("");
       setImage(null);
       setSelectedStudent("");
+      setAiSummary("");
+      setAiSkills([]);
 
       const imageInput = document.getElementById("imageInput");
 
@@ -190,6 +267,10 @@ function App() {
       setMessage(error.message);
     }
   }
+
+  // ============================================================
+  // DELETE ACTIVITY
+  // ============================================================
 
   async function deleteActivity(id) {
     const confirmed = window.confirm(
@@ -214,7 +295,10 @@ function App() {
     }
   }
 
-  // Add a new child
+  // ============================================================
+  // ADD CHILD
+  // ============================================================
+
   async function addStudent(event) {
     event.preventDefault();
     setMessage("");
@@ -247,7 +331,10 @@ function App() {
     }
   }
 
-  // Delete a child
+  // ============================================================
+  // DELETE CHILD
+  // ============================================================
+
   async function deleteStudent(id, name) {
     const confirmed = window.confirm(
       `Are you sure you want to delete ${name}? This will also delete the child's activities.`
@@ -406,6 +493,63 @@ function App() {
                 required
               />
 
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={generateActivitySummary}
+                disabled={aiLoading || !description.trim()}
+              >
+                {aiLoading
+                  ? "✨ Generating..."
+                  : "✨ Generate AI Summary"}
+              </button>
+
+              {aiSummary && (
+                <div
+                  style={{
+                    marginTop: "15px",
+                    padding: "15px",
+                    borderRadius: "12px",
+                    background: "#f7f3ff",
+                    border: "1px solid #ddd0ff",
+                  }}
+                >
+                  <strong>✨ AI Summary</strong>
+
+                  <p>{aiSummary}</p>
+
+                  {aiSkills.length > 0 && (
+                    <>
+                      <strong>Skills observed</strong>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          marginTop: "8px",
+                        }}
+                      >
+                        {aiSkills.map((skill, index) => (
+                          <span
+                            key={index}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: "20px",
+                              background: "#ffffff",
+                              border: "1px solid #ddd0ff",
+                              fontSize: "13px",
+                            }}
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               <label>Photo</label>
 
               <input
@@ -453,6 +597,7 @@ function App() {
         </div>
 
         {/* MANAGE CHILDREN */}
+
         <section className="card manage-children-card">
           <div className="section-heading">
             <div>
@@ -539,6 +684,8 @@ function App() {
             )}
           </div>
         </section>
+
+        {/* ACTIVITY HISTORY */}
 
         <section className="card history-card">
           <div className="section-heading">
@@ -650,6 +797,26 @@ function App() {
                     <small>
                       Recorded by {activity.teacher_name}
                     </small>
+
+                    <div style={{ marginTop: "12px" }}>
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          generateParentReport(activity.student_id)
+                        }
+                        disabled={
+                          parentReportLoading &&
+                          String(parentReportStudent) ===
+                            String(activity.student_id)
+                        }
+                      >
+                        {parentReportLoading &&
+                        String(parentReportStudent) ===
+                          String(activity.student_id)
+                          ? "✨ Generating Report..."
+                          : "✨ Generate Parent Report"}
+                      </button>
+                    </div>
                   </div>
 
                   {activity.image_url && (
@@ -672,7 +839,73 @@ function App() {
               ))
             )}
           </div>
+
+          {/* AI PARENT REPORT */}
+
+          {parentReport && (
+            <div
+              style={{
+                marginTop: "25px",
+                padding: "22px",
+                borderRadius: "16px",
+                background: "#fffaf0",
+                border: "1px solid #f0dfb0",
+              }}
+            >
+              <h2>👨‍👩‍👧 AI Parent Report</h2>
+
+              <p>
+                <strong>Child:</strong> {parentReport.childName}
+              </p>
+
+              <p>
+                <strong>Period:</strong> {parentReport.period}
+              </p>
+
+              <h3>🌟 Highlights</h3>
+
+              <ul>
+                {(parentReport.highlights || []).map(
+                  (item, index) => (
+                    <li key={index}>{item}</li>
+                  )
+                )}
+              </ul>
+
+              <h3>💪 Strengths Observed</h3>
+
+              <ul>
+                {(parentReport.strengths || []).map(
+                  (item, index) => (
+                    <li key={index}>{item}</li>
+                  )
+                )}
+              </ul>
+
+              <h3>🌱 Areas to Encourage</h3>
+
+              <ul>
+                {(parentReport.areasToEncourage || []).map(
+                  (item, index) => (
+                    <li key={index}>{item}</li>
+                  )
+                )}
+              </ul>
+
+              <h3>🏠 At-Home Ideas</h3>
+
+              <ul>
+                {(parentReport.homeActivities || []).map(
+                  (item, index) => (
+                    <li key={index}>{item}</li>
+                  )
+                )}
+              </ul>
+            </div>
+          )}
         </section>
+
+        {/* PRINCIPAL ANALYTICS */}
 
         {user.role === "PRINCIPAL" && analytics && (
           <section className="card analytics-card">
@@ -718,3 +951,4 @@ function App() {
 }
 
 export default App;
+
